@@ -21,6 +21,11 @@ on core.openflow_discovery.
 
 It's possible that some of this should be abstracted out into a generic
 Discovery module, or a Discovery superclass.
+
+NOTE: This code has been modified to add support for hypercontroller, without breaking existing
+functionalities. Modification was done in the _handle_openflow_PacketIn method.
+
+modified by: Babatunde Micheal Okutubo
 """
 
 from pox.lib.revent import *
@@ -443,16 +448,24 @@ class Discovery (EventMixin):
       log.warning("Port received its own LLDP packet; ignoring")
       return EventHalt
 
-    link = Discovery.Link(originatorDPID, originatorPort, event.dpid,
+    links = []
+    link1 = Discovery.Link(originatorDPID, originatorPort, event.dpid,
                           event.port)
+    links.append(link1)
+    link2 = None
+    if core.openflow.connections[originatorDPID].description == 'hctrl':
+      # LLDP from switch in the hypercontroller network, create reverse link
+      link2 = Discovery.Link(event.dpid, event.port, originatorDPID, originatorPort)
+      links.append(link2)
 
-    if link not in self.adjacency:
-      self.adjacency[link] = time.time()
-      log.info('link detected: %s', link)
-      self.raiseEventNoErrors(LinkEvent, True, link, event)
-    else:
-      # Just update timestamp
-      self.adjacency[link] = time.time()
+    for link in links:
+      if link not in self.adjacency:
+        self.adjacency[link] = time.time()
+        log.info('link detected: %s', link)
+        self.raiseEventNoErrors(LinkEvent, True, link, event)
+      else:
+        # Just update timestamp
+        self.adjacency[link] = time.time()
 
     return EventHalt # Probably nobody else needs this event
 
